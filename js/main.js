@@ -1,6 +1,8 @@
 
 var manifest = [
-	{ src: "cloud.png", id: "cloud" }
+	{ src: "cloud.png", id: "cloud" },
+	{ src: "cloud2.png", id: "cloud2" },
+	{ src: "player_sprite.png", id: "player" }
 ];
 
 
@@ -113,7 +115,7 @@ var Polygon = function(bodyInfo){
 
 	that.body = Matter.Body.create(bodyInfo);
 	that.shape = new createjs.Shape();
-	that.shape.color = "red";
+	that.shape.color = "black";
 
 	that.shape.graphics.append({
  		exec: function(ctx, shape) {
@@ -143,16 +145,25 @@ var Stage = function(){
 	var that = this;
 	var ground = new Polygon({position:{x:0,y:Game.world.size.h }, vertices: Vertices.ground, isStatic: true});
 
-	var generateCloud = function(){
-		var cloud = new createjs.Bitmap(Game.world.loader.getResult("cloud"));
-		var scale = getRandomArbitrary(0.5,1.3);
-		cloud.setTransform(getRandomArbitrary(0, Game.world.size.w), getRandomArbitrary(20,100), scale, scale);
+	var generateCloud = function(id){
+		var cloud = new createjs.Bitmap(Game.world.loader.getResult(id));
+		var scale = getRandomArbitrary(0.3,1.0);
+		cloud.setTransform(getRandomArbitrary(0, Game.world.size.w), getRandomArbitrary(0,100), scale, scale);
 		cloud.alpha = getRandomArbitrary(0.5,1);
 		cloud.velocity = getRandomArbitrary(45,100);
 		return cloud;
 	};
 
-	var clouds = [generateCloud(), generateCloud() , generateCloud(), generateCloud()];
+	var clouds = [
+	generateCloud("cloud"), 
+	generateCloud("cloud"), 
+	generateCloud("cloud2"), 
+	generateCloud("cloud2"), 
+	generateCloud("cloud2"), 
+	generateCloud("cloud"), 
+	generateCloud("cloud"), 
+	generateCloud("cloud"), 
+	generateCloud("cloud2")];
 
 	that.update = function(event){
 		var deltaS = event.delta / 1000;
@@ -173,6 +184,15 @@ var Stage = function(){
 var Player = function(){
 	Polygon.apply(this, arguments);
 	var that = this;
+	var spriteSheet = new createjs.SpriteSheet({
+		framerate: 20,
+		images: [Game.world.loader.getResult("player")],
+		frames: {"regX": 30, "height": 40, "count": 10, "regY": 0, "width": 150},
+		animations: {
+			run: [0, 9, "run", 1.5],
+		}
+	});
+	that.shape = new createjs.Sprite(spriteSheet, "run");
 
 	Game.stageShapes([that.shape]);
 	Game.stageBodies([that.body]);
@@ -183,7 +203,7 @@ var Player = function(){
 };
 	
 var Vertices = {
-	player:[{ x: 0, y: 0 }, { x: 25, y: 50 }, { x: 50, y: 0 }],
+	player:[{ x: 0, y: 0 }, { x: 30, y: 40 }, { x: 50, y: 0 }, { x: 50, y: 0 }],
 	ground:[{ x: 0, y: 0 }, { x: 10000, y: 0 }, { x: 10000, y: 10 }, { x: 0, y: 10 }]
 };
 

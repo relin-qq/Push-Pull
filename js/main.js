@@ -6,25 +6,15 @@ var Game =  function(){
 	var objects = {};
 
 	var renderer = {
-		create: function() {
-			return { controller: renderer };
-		},
-
-		world: function(engine) {
-			
-		}
+		create: function() { return { controller: renderer };},
+		world: function(engine) { }
 	};
 
-	var physicsEngine = Matter.Engine.create({
-		render: {
-			controller: renderer
-		}
-	});
-	Matter.Engine.run(physicsEngine);
-	
+	var physicsEngine = Matter.Engine.create({render: {controller: renderer}});
+	physicsEngine.world.gravity = {x:0,y:3};
+
 
 	that.moveVector = {x: 0, y:0};
-
 	stage.canvas.focus();
 	stage.canvas.addEventListener("keyup", function(e) {
 		// W S
@@ -51,122 +41,84 @@ var Game =  function(){
 	}, true);
 
 
-	var nextid = 0;
 	that.init = function(polygon){
-		objects[nextid++] = polygon;
 		stage.addChild(polygon.shape);
+		Matter.World.add(physicsEngine.world, polygon.body);
+	}
+
+	var nextid = 0;
+	that.getId = function(polygon){
+		objects[nextid++] = polygon;
 		return nextid;
 	}
 
 	var loop = function(event){
-		for(var key in objects){
-			objects[key].update();
-		}
+		Matter.Engine.update(physicsEngine, event.delta, 1);
 
+		for(var key in objects){
+			var polygon = objects[key];
+			polygon.update();
+		}
 		stage.update();
 	};
 
-	createjs.Ticker.addEventListener("tick", loop);
+	createjs.Ticker.addEventListener("tick", loop);	
 };
 
 
-var Stage = function(){
-
-
+var Ground = function(){
+	Polygon.apply(this, arguments);
 
 };
 
 
-var Polygon = function(){
+var Polygon = function(bodyInfo){
+	var that = this;
+	that.id = Game.getId(that);
+
+	that.body = Matter.Body.create(bodyInfo);
+	that.shape = new createjs.Shape();
+	that.shape.color = "red";
+
+ 	that.shape.graphics.append({
+ 		exec: function(ctx, shape) {
+			ctx.beginPath();
+
+			that.body.vertices.forEach(function(vertice){
+				ctx.lineTo(vertice.x,vertice.y);
+			});
+
+			ctx.fillStyle = shape.color;
+			ctx.fill();
+		}
+	});
+
+	that.position = bodyInfo.position;
+
+	that.update = function(){}
+
+	that.body.update = that.update;
+	Game.init(that);
+}
+
+var Player = function(){
+	Polygon.apply(this, arguments);
 	var that = this;
 
-	that.shape = new createjs.Shape();
-	that.body = Bodies.rectangle(400, 200, 80, 80);
-	that.body.updated = that.update;
-
-	that.position = {x:50, y:50};
-	that.velocity = {x:0, y:0};
-	that.acceleration = {
-		x:function(){return 1}, 
-		y:function(){return 1}
-	};
-
-	that.deceleration = 1000;
-	
-	that.id = Game.init(that);
-
-	var isDecelerating = false;
-	var gravitation = -1000;
-	that.update = function(body){
-		//Acceleration in a second
-		var tick = delta / 1000.0;
-
-		var tmpVelX = that.velocity.x;
-		var tmpVelY = that.velocity.y;
-		var accelX = that.acceleration.x();
-		var accelY = that.acceleration.y() - gravitation;
-
-		if(Math.abs(that.velocity.x) > 0 && accelX == 0){
-			isDecelerating = true;
-			accelX = that.velocity.x < 0 ? that.deceleration : that.deceleration * -1;
-		}
-
-		if(Math.abs(that.velocity.y) > 0 && accelY == 0){
-			isDecelerating = true;
-			accelY = that.velocity.y < 0 ? that.deceleration : that.deceleration * -1;
-		}
-
-		that.velocity.x += tick * accelX;
-		that.velocity.y += tick * accelY;
-
-		if(isDecelerating && ((tmpVelX > 0 && that.velocity.x < 0)|| (tmpVelX < 0 && that.velocity.x > 0))){
-			that.velocity.x = 0;
-			isDecelerating = false;
-		}
-
-		if(isDecelerating && ((tmpVelY > 0 && that.velocity.y < 0)|| (tmpVelY < 0 && that.velocity.y > 0))){
-			that.velocity.y = 0;
-			isDecelerating = false;
-		}
-
-		if(Math.abs(that.velocity.x) > 1000)
-			that.velocity.x = that.velocity.x < 0 ? -1000 : 1000;
-
-		if(Math.abs(that.velocity.y) > 1000)
-			that.velocity.y = that.velocity.y < 0 ? -1000 : 1000;
-		
-		that.position.x += tick * that.velocity.x;
-		that.position.y += tick * that.velocity.y;
-
-		that.shape.x = that.position.x;
-		that.shape.y = that.position.y;
+	that.update = function(){
+		Matter.Body.setVelocity(that.body, Matter.Vector.mult(Game.moveVector, 20));
 	}
 }
-
-var Player = function(game){
-	Polygon.apply(this);
-	var that = this;
-
-	that.velocity = {x: 0, y:0};
-
-	that.acceleration = {
-		x:function(){
-			var val = Game.moveVector.x * 10000;
-			return val;
-		}, 
-		y:function(){
-			var val = Game.moveVector.y * 10000;
-			return val;
-		}
-	};
-
-	Game.moveVector.y * that.acceleration.y
-	that.shape.graphics.beginFill("red").drawCircle(0, 0, 40);
-}
 	
+var Vertices = {
+	player:[{ x: 0, y: 0 }, { x: 25, y: 50 }, { x: 50, y: 0 }],
+	ground:[{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 100 }, { x: 0, y: 100 }]
+}
+
 window.addEventListener("load", function(){
 	Game = new Game();
-	var player = new Player();
+	var player = new Player({position:{x:50,y:50}, vertices: Vertices.player});
+	var ground = new Ground({position:{x:0,y:300}, vertices: Vertices.ground, isStatic: true, angle: Math.PI * 0.04})
 });
 
 // from http://stackoverflow.com/a/7533593 by CMS
@@ -178,3 +130,4 @@ var GeneratePrototype = function(parent){
 }
 
 Player.prototype = GeneratePrototype(Polygon);
+Ground.prototype = GeneratePrototype(Polygon);

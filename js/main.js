@@ -1,86 +1,104 @@
 
-var Game =  function(){
-	var that = this;
+var manifest = [
+	{ src: "cloud.png", id: "cloud" }
+];
 
-    var stage = new createjs.Stage("display");
-	var objects = {};
 
+var createPhysicsEngine =  function(){
 	var renderer = {
 		create: function() { return { controller: renderer };},
 		world: function(engine) { }
 	};
 
-	var physicsEngine = Matter.Engine.create({render: {controller: renderer}});
-	physicsEngine.world.gravity = {x:0,y:3};
+	return Matter.Engine.create({
+		render: {controller: renderer},
+	});
+};
 
+var Game =  function(){
+	var that = this;
 
-	that.moveVector = {x: 0, y:0};
+	var stage = new createjs.Stage("display");
+	var physicsEngine = createPhysicsEngine();
+	physicsEngine.world.gravity = { x:0 , y:3 };
+
+	that.world = {
+		inputVector : { x: 0, y: 0 },
+		size: { w: stage.canvas.width, h: stage.canvas.height },
+		stage: stage,
+		physics: physicsEngine,
+		loader: new createjs.LoadQueue(false)
+	};
+
 	stage.canvas.focus();
 	stage.canvas.addEventListener("keyup", function(e) {
 		// W S
 		if(e.keyCode == 87 || e.keyCode == 83)
-			that.moveVector.y = 0;
+			that.world.inputVector.y = 0;
 		// A D
 		if(e.keyCode == 65 || e.keyCode == 68)
-			that.moveVector.x = 0;
+			that.world.inputVector.x = 0;
 	}, true);
 
 	stage.canvas.addEventListener("keydown", function(e) {
 		// W
 		if(e.keyCode == 87)
-			that.moveVector.y = -1;
+			that.world.inputVector.y = -1;
 		// S
 		if(e.keyCode == 83)
-			that.moveVector.y = 1;
+			that.world.inputVector.y = 1;
 		// A
 		if(e.keyCode == 65)
-			that.moveVector.x = -1;
+			that.world.inputVector.x = -1;
 		// D
 		if(e.keyCode == 68)
-			that.moveVector.x = 1;
+			that.world.inputVector.x = 1;
 	}, true);
 
-
-	that.init = function(polygon){
-		stage.addChild(polygon.shape);
-		Matter.World.add(physicsEngine.world, polygon.body);
-	}
-
 	var nextid = 0;
+	var objects = {};
 	that.getId = function(polygon){
+		stage.addChild(polygon.shape);
 		objects[nextid++] = polygon;
 		return nextid;
 	}
 
-	var loop = function(event){
-		Matter.Engine.update(physicsEngine, event.delta, 1);
-
-		for(var key in objects){
-			var polygon = objects[key];
-			polygon.update();
-		}
-		stage.update();
+	that.stageBodies = function(bodies){
+		bodies.forEach(function(body){
+			Matter.World.add(physicsEngine.world, body);
+		});
 	};
 
-	createjs.Ticker.addEventListener("tick", loop);	
+	that.stageShapes = function(shapes){
+		shapes.forEach(function(shape){
+			stage.addChild(shape);
+		});
+	}
+
+	var init = function(){
+		createjs.Ticker.addEventListener("tick", function(event){
+			Matter.Engine.update(physicsEngine, event.delta, 1);
+
+			for(var key in objects){
+				var polygon = objects[key];
+				polygon.update();
+			}
+			stage.update();
+		});	
+	}
+
+	that.world.loader.addEventListener("complete", init);
+	that.world.loader.loadManifest(manifest, true, "img/");
 };
-
-
-var Ground = function(){
-	Polygon.apply(this, arguments);
-
-};
-
 
 var Polygon = function(bodyInfo){
 	var that = this;
-	that.id = Game.getId(that);
 
 	that.body = Matter.Body.create(bodyInfo);
 	that.shape = new createjs.Shape();
 	that.shape.color = "red";
 
- 	that.shape.graphics.append({
+	that.shape.graphics.append({
  		exec: function(ctx, shape) {
 			ctx.beginPath();
 
@@ -93,21 +111,36 @@ var Polygon = function(bodyInfo){
 		}
 	});
 
-	that.position = bodyInfo.position;
-
 	that.update = function(){}
 
-	that.body.update = that.update;
-	Game.init(that);
+	that.id = Game.getId(that);
 }
+
+var Ground = function(){
+	Polygon.apply(this, arguments);
+	var that = this;
+}
+
+var Stage = function(){
+	var that = this;
+	var ground = new Ground({position:{x:0,y:300}, vertices: Vertices.ground, isStatic: true});
+
+	var clouds = new createjs.Shape();
+	clouds.graphics.beginBitmapFill(Game.world.loader.getResult("cloud")).drawRect(0, 0, w, h);
+
+	Game.stageShapes([clouds]);
+	Game.stageBodies([ground.body]);
+};
 
 var Player = function(){
 	Polygon.apply(this, arguments);
 	var that = this;
 
 	that.update = function(){
-		Matter.Body.setVelocity(that.body, Matter.Vector.mult(Game.moveVector, 20));
+		Matter.Body.setVelocity(that.body, Matter.Vector.mult(Game.world.inputVector, 20));
 	}
+
+	Game.stageBodies([that.body]);
 }
 	
 var Vertices = {
@@ -118,7 +151,8 @@ var Vertices = {
 window.addEventListener("load", function(){
 	Game = new Game();
 	var player = new Player({position:{x:50,y:50}, vertices: Vertices.player});
-	var ground = new Ground({position:{x:0,y:300}, vertices: Vertices.ground, isStatic: true, angle: Math.PI * 0.04})
+	var stage = new Stage();
+	//var ground = new Ground({position:{x:0,y:300}, vertices: Vertices.ground, isStatic: true, angle: Math.PI * 0.04})
 });
 
 // from http://stackoverflow.com/a/7533593 by CMS

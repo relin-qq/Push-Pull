@@ -30,8 +30,11 @@ var Game =  function(){
 	var physicsEngine = createPhysicsEngine({ w: stage.canvas.width, h: stage.canvas.height });
 
 	that.world = {
-		keyboardVector : { x: 0, y: 0 },
+		movementVector : { x: 0, y: 0 },
 		mouseVector : { x: 0, y: 0},
+		keyboard: {
+			keys:{}
+		},
 		size: { w: stage.canvas.width, h: stage.canvas.height },
 		loader: new createjs.LoadQueue(false),
 		stage: stage,
@@ -44,33 +47,35 @@ var Game =  function(){
 
 	createjs.Ticker.setFPS(40);
 	stage.canvas.addEventListener("keyup", function(e) {
+		Game.world.keyboard.keys[e.keyCode] = undefined;
 		// W S
 		if(/*e.keyCode == 87 || e.keyCode == 83 ||*/ e.keyCode == 32)
-			that.world.keyboardVector.y = 0;
+			that.world.movementVector.y = 0;
 		// A D
 		if(e.keyCode == 65 || e.keyCode == 68)
-			that.world.keyboardVector.x = 0;
+			that.world.movementVector.x = 0;
 	}, true);
 
 	stage.canvas.addEventListener("keydown", function(e) {
+		Game.world.keyboard.keys[e.keyCode] = true;
 		// W
 		//if(e.keyCode == 87)
-		//	that.world.keyboardVector.y = -1;
+		//	that.world.movementVector.y = -1;
 
 		//spacebar
 		if(e.keyCode == 32)
-			that.world.keyboardVector.y = -1;
+			that.world.movementVector.y = -1;
 
 		// S
 		//if(e.keyCode == 83)
-		//	that.world.keyboardVector.y = 1;
+		//	that.world.movementVector.y = 1;
 
 		// A
 		if(e.keyCode == 65)
-			that.world.keyboardVector.x = -1;
+			that.world.movementVector.x = -1;
 		// D
 		if(e.keyCode == 68)
-			that.world.keyboardVector.x = 1;
+			that.world.movementVector.x = 1;
 	}, true);
 
 	stage.on("stagemousemove", function(evt) {
@@ -80,7 +85,10 @@ var Game =  function(){
 	});
 
 	stage.on("stagemousedown", function(event){
+		event.nativeEvent.preventDefault();
+		event.nativeEvent.stopPropagation();
 		clickedEventListener.forEach(function(callback){
+			console.log(event)
 			callback(event);
 		});
 	});
@@ -209,10 +217,44 @@ var Stage = function(){
 };
 
 
-var GravityBall = function(){
+var GravityBall = function(bodyInfo, behaviour){
 	Polygon.apply(this, arguments);
 	var that = this;
 
+	that.shape.color = behaviour == -1 ? "green" : "red";
+	that.body.mass = 20;
+
+	var pulseRate = 0.1;
+	that.update = function(event){
+		if(!that.body.isStatic)
+			return;
+
+		var deltaS = event.delta / 1000;
+
+		/*var hitTest = Matter.Query.region(
+			Game.world.physics.world.bodies, 
+			Matter.Bounds.create([
+				{ x:that.body.bounds.min.x - 50, y:that.body.bounds.min.y - 50 },
+				{ x:that.body.bounds.min.x + 50, y:that.body.bounds.min.y + 50 },
+				{ x:that.body.bounds.max.x + 50, y:that.body.bounds.max.y + 50 },
+				{ x:that.body.bounds.max.x - 50, y:that.body.bounds.max.y - 50 }
+			]));*/
+
+		if(true){
+			var force = getRandomArbitrary(0.01,0.05);
+			Game.world.physics.world.bodies.forEach(function(body){
+				var GravitationVector = Matter.Vector.normalise(
+				Matter.Vector.sub(that.body.position , body.position));
+
+				Matter.Body.applyForce(body, that.body.position, Matter.Vector.mult(GravitationVector, force * behaviour));
+			});
+		}
+	};
+
+	setTimeout(function(){
+		that.body.isStatic = true;
+		
+	}, 1000);
 }
 
 var Player = function(){
@@ -243,10 +285,10 @@ var Player = function(){
 
 	var lastKeyboardXVec = 1;
 	var animPlayer = function(){
-		if(Game.world.keyboardVector.x == 0){
+		if(Game.world.movementVector.x == 0){
 			player.stop();
 		} else{
-			lastKeyboardXVec = Game.world.keyboardVector.x;
+			lastKeyboardXVec = Game.world.movementVector.x;
 			player.play();
 		}
 	};
@@ -256,18 +298,18 @@ var Player = function(){
 			Game.world.physics.world.bodies, 
 			Matter.Bounds.create([{ x:that.body.bounds.max.x + 1, y:that.body.bounds.max.y + 1 }]));
 
-		if(hitTest.length && Game.world.keyboardVector.y != 0){
+		if(hitTest.length && Game.world.movementVector.y != 0){
 			Matter.Body.applyForce(that.body, {x:0, y: 0}, {x:0, y: -0.02* that.body.mass});
 		}
 
-		Matter.Body.applyForce(that.body, {x:0, y:0}, {x:Game.world.keyboardVector.x * 0.0001 * that.body.mass, y:0});
-		//Matter.Body.setVelocity(that.body, {x:Game.world.keyboardVector.x * 5, y:1 });
+		Matter.Body.applyForce(that.body, {x:0, y:0}, {x:Game.world.movementVector.x * 0.0001 * that.body.mass, y:0});
+		//Matter.Body.setVelocity(that.body, {x:Game.world.movementVector.x * 5, y:1 });
 	};
 
 	var handPos = {x:0,y:0};
 	var handDistance = 7// in px
 
-	that.update = function(){
+	that.update = function(event){
 		animPlayer();
 		handleMovement();
 
@@ -286,20 +328,30 @@ var Player = function(){
 	}
 
 	Game.clickedEvent(function(){
-		var gravityBall = new GravityBall({
+		var polygon;
+		var properties = {
 			position:{x:that.shape.x, y:that.shape.y}, 
 			vertices: Matter.Bodies.circle(0, 0, 10).vertices,
 			mass:10
-		});
-		
-		Game.stagePolygon([gravityBall]);
+		};
+
+		if(Game.world.keyboard.keys[17]){
+			polygon = new GravityBall(properties, 1);
+		} else if(Game.world.keyboard.keys[16]){
+			polygon = new GravityBall(properties, -1);
+		}else{
+			polygon = new Polygon(properties);
+
+		}
+
+		Game.stagePolygon([polygon]);
 
 		var normaliseMouseVector = Matter.Vector.normalise(
 			Matter.Vector.sub({x:that.shape.x, y:that.shape.y} , Game.world.mouseVector));
 
-		var force = -0.02 * particle.body.mass;
+		var force = -getRandomArbitrary(0.02,0.03) * polygon.body.mass;
 
-		Matter.Body.applyForce(particle.body, 
+		Matter.Body.applyForce(polygon.body, 
 			{ x: 0, y:0}, 
 			{ x: normaliseMouseVector.x * force, y: normaliseMouseVector.y * force});
 	});

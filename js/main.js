@@ -15,7 +15,7 @@ var createPhysicsEngine =  function(size){
 	return Matter.Engine.create({
 		render: {controller: renderer},
 		world : Matter.World.create({
-			gravity : { x:0 , y:3 },
+			gravity : { x:0 , y:1 },
 			bounds: { 
 			min: { x: 0, y: 0 }, 
 			max: { x: size.w, y: size.h } }
@@ -31,17 +31,20 @@ var Game =  function(){
 
 	that.world = {
 		keyboardVector : { x: 0, y: 0 },
+		mouseVector : {x: 0, y:0},
 		size: { w: stage.canvas.width, h: stage.canvas.height },
 		stage: stage,
+ 		objects: {},
 		physics: physicsEngine,
 		loader: new createjs.LoadQueue(false)
 	};
 
+
+
 	createjs.Ticker.setFPS(40);
-	stage.canvas.focus();
 	stage.canvas.addEventListener("keyup", function(e) {
 		// W S
-		if(e.keyCode == 87 || e.keyCode == 83)
+		if(/*e.keyCode == 87 || e.keyCode == 83 ||*/ e.keyCode == 32)
 			that.world.keyboardVector.y = 0;
 		// A D
 		if(e.keyCode == 65 || e.keyCode == 68)
@@ -50,11 +53,17 @@ var Game =  function(){
 
 	stage.canvas.addEventListener("keydown", function(e) {
 		// W
-		if(e.keyCode == 87)
+		//if(e.keyCode == 87)
+		//	that.world.keyboardVector.y = -1;
+
+		//spacebar
+		if(e.keyCode == 32)
 			that.world.keyboardVector.y = -1;
+
 		// S
-		if(e.keyCode == 83)
-			that.world.keyboardVector.y = 1;
+		//if(e.keyCode == 83)
+		//	that.world.keyboardVector.y = 1;
+
 		// A
 		if(e.keyCode == 65)
 			that.world.keyboardVector.x = -1;
@@ -63,10 +72,15 @@ var Game =  function(){
 			that.world.keyboardVector.x = 1;
 	}, true);
 
+	stage.on("stagemousemove", function(evt) {
+		stage.canvas.focus();
+		Game.world.mouseVector.x = evt.stageX;
+		Game.world.mouseVector.y = evt.stageY;
+	});
+
 	var nextid = 0;
-	var objects = {};
 	that.getId = function(polygon){
-		objects[nextid++] = polygon;
+		Game.world.objects[nextid++] = polygon;
 		return nextid;
 	}
 
@@ -88,8 +102,8 @@ var Game =  function(){
 		createjs.Ticker.addEventListener("tick", function(event){
 			Matter.Engine.update(physicsEngine, event.delta, 1);
 
-			for(var key in objects){
-				var polygon = objects[key];
+			for(var key in Game.world.objects){
+				var polygon = Game.world.objects[key];
 				polygon.update(event);
 			}
 			stage.update();
@@ -153,7 +167,7 @@ var Stage = function(){
 		cloud.alpha = getRandomArbitrary(0.5,1);
 		cloud.velocity = getRandomArbitrary(45,100);
 		return cloud;
-	};
+	}; 
 
 	var clouds = [
 	generateCloud("cloud"), 
@@ -185,6 +199,8 @@ var Stage = function(){
 var Player = function(){
 	Polygon.apply(this, arguments);
 	var that = this;
+
+	that.shape = new createjs.Container();
 	var spriteSheet = new createjs.SpriteSheet({
 		framerate: 30,
 		images: [Game.world.loader.getResult("player")],
@@ -193,28 +209,58 @@ var Player = function(){
 			run: [0, 9, "run", 0.5],
 		}
 	});
-	that.shape = new createjs.Sprite(spriteSheet, "run");
+
+	var hand = new createjs.Shape();
+	hand.graphics.beginFill("#ff0000").drawRect(0, 0, 5, 5);
+	var player = new createjs.Sprite(spriteSheet, "run");
+
+	that.shape.addChild(player, hand);
 
 	Game.stageShapes([that.shape]);
 	Game.stageBodies([that.body]);
 
 	var lastKeyboardXVec = 1;
-	that.update = function(){
-
+	var animPlayer = function(){
 		if(Game.world.keyboardVector.x == 0){
-			that.shape.stop();
+			player.stop();
 		} else{
 			lastKeyboardXVec = Game.world.keyboardVector.x;
-			that.shape.play();
+			player.play();
+		}
+	};
+
+	var handleMovement = function(){
+		var hitTest = Matter.Query.region(
+			Game.world.physics.world.bodies, 
+			Matter.Bounds.create([{ x:that.body.bounds.max.x + 1, y:that.body.bounds.max.y + 1 }]));
+
+		if(hitTest.length && Game.world.keyboardVector.y != 0){
+			Matter.Body.applyForce(that.body, {x:0, y: 0}, {x:0, y: -0.02* that.body.mass});
 		}
 
-		Matter.Body.setVelocity(that.body, Matter.Vector.mult(Game.world.keyboardVector, 5));
+		Matter.Body.applyForce(that.body, {x:0, y:0}, {x:Game.world.keyboardVector.x * 0.0001 * that.body.mass, y:0});
+		//Matter.Body.setVelocity(that.body, {x:Game.world.keyboardVector.x * 5, y:1 });
+	};
+
+	var handPos = {x:0,y:0};
+	var handDistance = 7// in px
+
+	that.update = function(){
+		animPlayer();
+		handleMovement();
+
+		handPos = Matter.Vector.sub(Game.world.mouseVector, {x:that.shape.x, y:that.shape.y});
+		handPos = Matter.Vector.normalise(handPos);
+		handPos = Matter.Vector.mult(handPos, handDistance);
+
 		that.shape.setTransform(
-			that.body.position.x - 40/2, 
-			that.body.position.y - 30/2, 
-			lastKeyboardXVec, 
-			1,
-			/*that.body.angle * 180/Math.PI*/1);
+			that.body.bounds.max.x-that.shape.getBounds().width + that.shape.getBounds().width/2, 
+			that.body.bounds.max.y-that.shape.getBounds().height,
+			lastKeyboardXVec,1,0,0,0,that.shape.getBounds().width/2, 0);
+
+		hand.setTransform(
+			handPos.x * lastKeyboardXVec + that.shape.getBounds().width /2,
+			handPos.y + that.shape.getBounds().height /2 );
 	}
 };
 	
@@ -227,7 +273,7 @@ window.addEventListener("load", function(){
 	Game = new Game();
 
 	Game.loaded(function(){
-		var player = new Player({position:{x:0,y:0}, vertices: Matter.Bodies.circle(400, 100, 25).vertices});
+		var player = new Player({position:{x:0,y:0},mass:100, vertices: Matter.Bodies.circle(0, 0, 20).vertices});
 		var stage = new Stage();
 	});
 

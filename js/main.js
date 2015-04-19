@@ -37,6 +37,7 @@ var Game =  function(){
 		loader: new createjs.LoadQueue(false)
 	};
 
+	createjs.Ticker.setFPS(40);
 	stage.canvas.focus();
 	stage.canvas.addEventListener("keyup", function(e) {
 		// W S
@@ -185,11 +186,11 @@ var Player = function(){
 	Polygon.apply(this, arguments);
 	var that = this;
 	var spriteSheet = new createjs.SpriteSheet({
-		framerate: 20,
+		framerate: 30,
 		images: [Game.world.loader.getResult("player")],
-		frames: {"regX": 30, "height": 40, "count": 10, "regY": 0, "width": 150},
+		frames: {"regX": 0, "height": 40, "count": 10, "regY": 0, "width": 30},
 		animations: {
-			run: [0, 9, "run", 1.5],
+			run: [0, 9, "run", 0.5],
 		}
 	});
 	that.shape = new createjs.Sprite(spriteSheet, "run");
@@ -197,13 +198,28 @@ var Player = function(){
 	Game.stageShapes([that.shape]);
 	Game.stageBodies([that.body]);
 
+	var lastKeyboardXVec = 1;
 	that.update = function(){
-		Matter.Body.setVelocity(that.body, Matter.Vector.mult(Game.world.keyboardVector, 20));
+
+		if(Game.world.keyboardVector.x == 0){
+			that.shape.stop();
+		} else{
+			lastKeyboardXVec = Game.world.keyboardVector.x;
+			that.shape.play();
+		}
+
+		Matter.Body.setVelocity(that.body, Matter.Vector.mult(Game.world.keyboardVector, 5));
+		that.shape.setTransform(
+			that.body.position.x - 40/2, 
+			that.body.position.y - 30/2, 
+			lastKeyboardXVec, 
+			1,
+			/*that.body.angle * 180/Math.PI*/1);
 	}
 };
 	
 var Vertices = {
-	player:[{ x: 0, y: 0 }, { x: 30, y: 40 }, { x: 50, y: 0 }, { x: 50, y: 0 }],
+	player:[{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 40 }, { x: 0, y: 40 }],
 	ground:[{ x: 0, y: 0 }, { x: 10000, y: 0 }, { x: 10000, y: 10 }, { x: 0, y: 10 }]
 };
 
@@ -211,7 +227,7 @@ window.addEventListener("load", function(){
 	Game = new Game();
 
 	Game.loaded(function(){
-		var player = new Player({position:{x:50,y:50}, vertices: Vertices.player});
+		var player = new Player({position:{x:0,y:0}, vertices: Matter.Bodies.circle(400, 100, 25).vertices});
 		var stage = new Stage();
 	});
 

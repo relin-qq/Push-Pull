@@ -31,12 +31,13 @@ var Game =  function(){
 
 	that.world = {
 		keyboardVector : { x: 0, y: 0 },
-		mouseVector : {x: 0, y:0},
+		mouseVector : { x: 0, y: 0},
 		size: { w: stage.canvas.width, h: stage.canvas.height },
+		loader: new createjs.LoadQueue(false),
 		stage: stage,
- 		objects: {},
 		physics: physicsEngine,
-		loader: new createjs.LoadQueue(false)
+		mouseAction : {},
+		objects: {},
 	};
 
 
@@ -78,15 +79,27 @@ var Game =  function(){
 		Game.world.mouseVector.y = evt.stageY;
 	});
 
+	stage.on("stagemousedown", function(event){
+		clickedEventListener.forEach(function(callback){
+			callback(event);
+		});
+	});
+
+	var clickedEventListener = [];
+	that.clickedEvent =function(callback){
+		clickedEventListener.push(callback);
+	};
+
 	var nextid = 0;
 	that.getId = function(polygon){
 		Game.world.objects[nextid++] = polygon;
 		return nextid;
 	}
 
-	that.stageBodies = function(bodies){
-		bodies.forEach(function(body){
-			Matter.World.add(physicsEngine.world, body);
+	that.stagePolygon = function(polygons){
+		polygons.forEach(function(polygon){
+			Matter.World.add(physicsEngine.world, [polygon.body]);
+			stage.addChild(polygon.shape);
 		});
 	};
 
@@ -191,33 +204,42 @@ var Stage = function(){
 		});
 	}
 
-	Game.stageShapes([ground.shape]);
+	Game.stagePolygon([ground]);
 	Game.stageShapes(clouds, true);
-	Game.stageBodies([ground.body]);
 };
+
+
+var GravityBall = function(){
+	Polygon.apply(this, arguments);
+	var that = this;
+
+}
 
 var Player = function(){
 	Polygon.apply(this, arguments);
 	var that = this;
+	var hand, player;
 
-	that.shape = new createjs.Container();
-	var spriteSheet = new createjs.SpriteSheet({
-		framerate: 30,
-		images: [Game.world.loader.getResult("player")],
-		frames: {"regX": 0, "height": 40, "count": 10, "regY": 0, "width": 30},
-		animations: {
-			run: [0, 9, "run", 0.5],
-		}
-	});
+	var init = function(){
+		that.shape = new createjs.Container();
 
-	var hand = new createjs.Shape();
-	hand.graphics.beginFill("#ff0000").drawRect(0, 0, 5, 5);
-	var player = new createjs.Sprite(spriteSheet, "run");
+		hand = new createjs.Shape();
+		hand.graphics.beginFill("#ffffff").drawRect(0, 0, 5, 5);
 
-	that.shape.addChild(player, hand);
+		player = new createjs.Sprite(new createjs.SpriteSheet({
+			framerate: 30,
+			images: [Game.world.loader.getResult("player")],
+			frames: {"regX": 0, "height": 40, "count": 10, "regY": 0, "width": 30},
+			animations: {
+				run: [0, 9, "run", 0.5],
+			}
+		}), "run");
 
-	Game.stageShapes([that.shape]);
-	Game.stageBodies([that.body]);
+		that.shape.addChild(player, hand);
+		Game.stagePolygon([that]);
+	}
+
+	init();
 
 	var lastKeyboardXVec = 1;
 	var animPlayer = function(){
@@ -262,6 +284,25 @@ var Player = function(){
 			handPos.x * lastKeyboardXVec + that.shape.getBounds().width /2,
 			handPos.y + that.shape.getBounds().height /2 );
 	}
+
+	Game.clickedEvent(function(){
+		var gravityBall = new GravityBall({
+			position:{x:that.shape.x, y:that.shape.y}, 
+			vertices: Matter.Bodies.circle(0, 0, 10).vertices,
+			mass:10
+		});
+		
+		Game.stagePolygon([gravityBall]);
+
+		var normaliseMouseVector = Matter.Vector.normalise(
+			Matter.Vector.sub({x:that.shape.x, y:that.shape.y} , Game.world.mouseVector));
+
+		var force = -0.02 * particle.body.mass;
+
+		Matter.Body.applyForce(particle.body, 
+			{ x: 0, y:0}, 
+			{ x: normaliseMouseVector.x * force, y: normaliseMouseVector.y * force});
+	});
 };
 	
 var Vertices = {
@@ -291,3 +332,4 @@ var GeneratePrototype = function(parent){
 Polygon.prototype = GeneratePrototype(UIElement);
 Player.prototype = GeneratePrototype(Polygon);
 Ground.prototype = GeneratePrototype(Polygon);
+GravityBall.prototype = GeneratePrototype(Polygon);
